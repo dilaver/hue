@@ -43,7 +43,7 @@ LOG = logging.getLogger(__name__)
 
 STARTUP_DEADLINE = 60.0
 CLEANUP_TMP_DIR = os.environ.get('MINI_CLUSTER_CLEANUP', 'true')
-TEST_ON_REAL_CLUSTER = os.getenv('HUE_TEST_ON_REAL_CLUSTER', False)
+TEST_ON_REAL_CLUSTER = os.getenv('HUE_TEST_ON_REAL_CLUSTER', False) in ['True', 'true', 'y', 'Y']
 
 
 class PseudoHdfs4(object):
