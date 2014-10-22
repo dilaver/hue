@@ -43,6 +43,7 @@ LOG = logging.getLogger(__name__)
 
 STARTUP_DEADLINE = 60.0
 CLEANUP_TMP_DIR = os.environ.get('MINI_CLUSTER_CLEANUP', 'true')
+TEST_ON_REAL_CLUSTER = os.getenv('HUE_TEST_ON_REAL_CLUSTER', False)
 
 
 class PseudoHdfs4(object):
@@ -51,10 +52,15 @@ class PseudoHdfs4(object):
   def __init__(self):
     self._tmpdir = tempfile.mkdtemp(prefix='tmp_hue_')
     os.chmod(self._tmpdir, 0755)
-    self._superuser = getpass.getuser()
 
     self._fs = None
     self._jt = None
+
+    if not TEST_ON_REAL_CLUSTER:
+      self._superuser = getpass.getuser()
+    else:
+      LOG.warning("Testing on real cluster.")
+      self._superuser = self.fs.superuser
 
     self._mr2_env = None
     self._log_dir = None
@@ -127,39 +133,51 @@ class PseudoHdfs4(object):
   @property
   def fs(self):
     if self._fs is None:
-      if self._dfs_http_address is None:
-        LOG.warn("Attempt to access uninitialized filesystem")
-        return None
-      self._fs = hadoop.fs.webhdfs.WebHdfs("http://%s/webhdfs/v1" % (self._dfs_http_address,), self.fs_default_name)
+      if not TEST_ON_REAL_CLUSTER:
+        if self._dfs_http_address is None:
+          LOG.warn("Attempt to access uninitialized filesystem")
+          return None
+        self._fs = hadoop.fs.webhdfs.WebHdfs("http://%s/webhdfs/v1" % (self._dfs_http_address,), self.fs_default_name)
+      else:
+        self._fs = hadoop.cluster.get_hdfs()
     return self._fs
 
   @property
   def jt(self):
     if self._jt is None:
-      self._jt = LiveJobTracker(self._fqdn, 0)
+      if not TEST_ON_REAL_CLUSTER:
+        if self._dfs_http_address is None:
+          LOG.warn("Attempt to access uninitialized filesystem")
+          return None
+        self._jt = LiveJobTracker(self._fqdn, 0)
+      else:
+        self._jt = hadoop.cluster.get_mrcluster()
+
     return self._jt
 
   def stop(self):
-    def _kill_proc(name, proc):
-      try:
-        while proc is not None and proc.poll() is None:
-          os.kill(proc.pid, signal.SIGKILL)
-          LOG.info('Stopping %s pid %s' % (name, proc.pid,))
-          time.sleep(0.5)
-      except Exception, ex:
-        LOG.exception('Failed to stop pid %s. You may want to do it manually: %s' % (proc.pid, ex))
 
-    _kill_proc('NameNode', self._nn_proc)
-    _kill_proc('DataNode', self._dn_proc)
-    _kill_proc('ResourceManager', self._rm_proc)
-    _kill_proc('Nodemanager', self._nm_proc)
-    _kill_proc('HistoryServer', self._hs_proc)
+    if not TEST_ON_REAL_CLUSTER:
+      def _kill_proc(name, proc):
+        try:
+          while proc is not None and proc.poll() is None:
+            os.kill(proc.pid, signal.SIGKILL)
+            LOG.info('Stopping %s pid %s' % (name, proc.pid,))
+            time.sleep(0.5)
+        except Exception, ex:
+          LOG.exception('Failed to stop pid %s. You may want to do it manually: %s' % (proc.pid, ex))
 
-    self._nn_proc = None
-    self._dn_proc = None
-    self._rm_proc = None
-    self._nm_proc = None
-    self._hs_proc = None
+      _kill_proc('NameNode', self._nn_proc)
+      _kill_proc('DataNode', self._dn_proc)
+      _kill_proc('ResourceManager', self._rm_proc)
+      _kill_proc('Nodemanager', self._nm_proc)
+      _kill_proc('HistoryServer', self._hs_proc)
+
+      self._nn_proc = None
+      self._dn_proc = None
+      self._rm_proc = None
+      self._nm_proc = None
+      self._hs_proc = None
 
     if CLEANUP_TMP_DIR == 'false':
       LOG.info('Skipping cleanup of temp directory "%s"' % (self._tmpdir,))
@@ -167,8 +185,10 @@ class PseudoHdfs4(object):
       LOG.info('Cleaning up temp directory "%s". Use "export MINI_CLUSTER_CLEANUP=false" to avoid.' % (self._tmpdir,))
       shutil.rmtree(self._tmpdir, ignore_errors=True)
 
-    if self.shutdown_hook is not None:
-      self.shutdown_hook()
+    if not TEST_ON_REAL_CLUSTER:
+      if self.shutdown_hook is not None:
+        LOG.warning("Running shutdown hooks.")
+        self.shutdown_hook()
 
 
   def _tmppath(self, filename):
@@ -190,6 +210,9 @@ class PseudoHdfs4(object):
     self._local_dir = self._tmppath('local')
     if not os.path.exists(self._local_dir):
       os.mkdir(self._local_dir)
+
+    if TEST_ON_REAL_CLUSTER:
+      return
 
     self._write_hadoop_metrics_conf(self.hadoop_conf_dir)
     self._write_core_site()
@@ -510,6 +533,10 @@ def shared_cluster():
       cluster.start()
     except Exception, ex:
       LOG.exception("Failed to fully bring up test cluster: %s" % (ex,))
+
+    if TEST_ON_REAL_CLUSTER:
+      _shared_cluster = cluster
+      return _shared_cluster
 
     fqdn = socket.getfqdn()
     webhdfs_url = "http://%s:%s/webhdfs/v1" % (fqdn, cluster.dfs_http_port,)
