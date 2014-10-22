@@ -37,6 +37,7 @@ from liboozie.conf import OOZIE_URL
 
 _oozie_lock = threading.Lock()
 
+TEST_ON_REAL_CLUSTER = os.getenv('HUE_TEST_ON_REAL_CLUSTER', False) in ['True', 'true', 'y', 'Y']
 LOG = logging.getLogger(__name__)
 
 
@@ -51,8 +52,14 @@ class OozieServerProvider(object):
   is_oozie_running = False
 
   @classmethod
-  def setup_class(cls):
+  def setup_class(cls, user=None):
     cls.cluster = pseudo_hdfs4.shared_cluster()
+
+    if TEST_ON_REAL_CLUSTER:
+      from liboozie import oozie_api
+      cls.oozie = oozie_api.get_oozie(user)
+      return
+
     cls.oozie, callback = cls._get_shared_oozie_server()
     cls.shutdown = [callback]
 

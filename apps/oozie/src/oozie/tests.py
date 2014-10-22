@@ -313,6 +313,7 @@ class OozieBase(OozieServerProvider):
     self.user = User.objects.get(username="test")
     grant_access("test", "test", "oozie")
     add_to_group("test")
+
     self.cluster = OozieServerProvider.cluster
     self.install_examples()
 
@@ -322,7 +323,10 @@ class OozieBase(OozieServerProvider):
       return
 
     self.c.post(reverse('oozie:install_examples'))
-    self.cluster.fs.do_as_user('test', self.cluster.fs.create_home_dir, '/user/test')
+
+    test_on_real_cluster = os.getenv('HUE_TEST_ON_REAL_CLUSTER', False)
+    if not test_on_real_cluster:
+      self.cluster.fs.do_as_user('test', self.cluster.fs.create_home_dir, '/user/test')
 
     _INITIALIZED = True
 
