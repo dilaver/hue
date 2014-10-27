@@ -558,7 +558,7 @@ def test_validate_path():
   assert_not_equal([], validate_path(desktop.conf.SSL_PRIVATE_KEY, is_dir=True))
   reset()
 
-@attr('requires_hadoop')
+@attr('requires_hadoop', 'cluster_runnable')
 def test_config_check():
   reset = (
     desktop.conf.SECRET_KEY.set_for_testing(''),

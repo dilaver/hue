@@ -41,7 +41,7 @@ from views import snappy_installed
 LOG = logging.getLogger(__name__)
 
 
-@attr('requires_hadoop')
+@attr('requires_hadoop', 'cluster_runnable')
 def test_remove():
   cluster = pseudo_hdfs4.shared_cluster()
 
@@ -79,7 +79,7 @@ def test_remove():
       pass      # Don't let cleanup errors mask earlier failures
 
 
-@attr('requires_hadoop')
+@attr('requires_hadoop', 'cluster_runnable')
 def test_move():
   cluster = pseudo_hdfs4.shared_cluster()
 
@@ -133,7 +133,7 @@ def test_move():
       pass      # Don't let cleanup errors mask earlier failures
 
 
-@attr('requires_hadoop')
+@attr('requires_hadoop', 'cluster_runnable')
 def test_copy():
   cluster = pseudo_hdfs4.shared_cluster()
 
@@ -187,7 +187,7 @@ def test_copy():
       pass      # Don't let cleanup errors mask earlier failures
 
 
-@attr('requires_hadoop')
+@attr('requires_hadoop', 'cluster_runnable')
 def test_mkdir_singledir():
   cluster = pseudo_hdfs4.shared_cluster()
   cluster.fs.setuser('test')
@@ -220,7 +220,7 @@ def test_mkdir_singledir():
       pass      # Don't let cleanup errors mask earlier failures
 
 
-@attr('requires_hadoop')
+@attr('requires_hadoop', 'cluster_runnable')
 def test_touch():
   cluster = pseudo_hdfs4.shared_cluster()
   cluster.fs.setuser('test')
@@ -254,7 +254,7 @@ def test_touch():
       pass
 
 
-@attr('requires_hadoop')
+@attr('requires_hadoop', 'cluster_runnable')
 def test_chmod():
   cluster = pseudo_hdfs4.shared_cluster()
 
@@ -311,7 +311,7 @@ def test_chmod():
       pass      # Don't let cleanup errors mask earlier failures
 
 
-@attr('requires_hadoop')
+@attr('requires_hadoop', 'cluster_runnable')
 def test_chmod_sticky():
   cluster = pseudo_hdfs4.shared_cluster()
 
@@ -354,7 +354,7 @@ def test_chmod_sticky():
       pass      # Don't let cleanup errors mask earlier failures
 
 
-@attr('requires_hadoop')
+@attr('requires_hadoop', 'cluster_runnable')
 def test_chown():
   cluster = pseudo_hdfs4.shared_cluster()
 
@@ -391,7 +391,7 @@ def test_chown():
   assert_equal("y", cluster.fs.stats(PATH_3)["group"])
 
 
-@attr('requires_hadoop')
+@attr('requires_hadoop', 'cluster_runnable')
 def test_rename():
   cluster = pseudo_hdfs4.shared_cluster()
 
@@ -411,7 +411,7 @@ def test_rename():
   assert_true(cluster.fs.exists(PREFIX + NEW_NAME))
 
 
-@attr('requires_hadoop')
+@attr('requires_hadoop', 'cluster_runnable')
 def test_listdir():
   cluster = pseudo_hdfs4.shared_cluster()
   try:
@@ -492,7 +492,7 @@ def test_listdir():
       pass      # Don't let cleanup errors mask earlier failures
 
 
-@attr('requires_hadoop')
+@attr('requires_hadoop', 'cluster_runnable')
 def test_listdir_sort_and_filter():
   cluster = pseudo_hdfs4.shared_cluster()
   c = make_logged_in_client(cluster.superuser)
@@ -568,7 +568,7 @@ def test_listdir_sort_and_filter():
       pass      # Don't let cleanup errors mask earlier failures
 
 
-@attr('requires_hadoop')
+@attr('requires_hadoop', 'cluster_runnable')
 def test_chooser():
   cluster = pseudo_hdfs4.shared_cluster()
   c = make_logged_in_client()
@@ -581,7 +581,7 @@ def test_chooser():
   assert_equal('/', dic['path'])
 
 
-@attr('requires_hadoop')
+@attr('requires_hadoop', 'cluster_runnable')
 def test_view_snappy_compressed():
   if not snappy_installed():
     raise SkipTest
@@ -637,7 +637,7 @@ def test_view_snappy_compressed():
       pass      # Don't let cleanup errors mask earlier failures
 
 
-@attr('requires_hadoop')
+@attr('requires_hadoop', 'cluster_runnable')
 def test_view_snappy_compressed_avro():
   if not snappy_installed():
     raise SkipTest
@@ -696,7 +696,7 @@ def test_view_snappy_compressed_avro():
       pass      # Don't let cleanup errors mask earlier failures
 
 
-@attr('requires_hadoop')
+@attr('requires_hadoop', 'cluster_runnable')
 def test_view_avro():
   cluster = pseudo_hdfs4.shared_cluster()
   try:
@@ -759,7 +759,7 @@ def test_view_avro():
       pass      # Don't let cleanup errors mask earlier failures
 
 
-@attr('requires_hadoop')
+@attr('requires_hadoop', 'cluster_runnable')
 def test_view_parquet():
   cluster = pseudo_hdfs4.shared_cluster()
   try:
@@ -789,7 +789,7 @@ def test_view_parquet():
       pass      # Don't let cleanup errors mask earlier failures
 
 
-@attr('requires_hadoop')
+@attr('requires_hadoop', 'cluster_runnable')
 def test_view_gz():
   cluster = pseudo_hdfs4.shared_cluster()
   try:
@@ -874,7 +874,7 @@ def test_view_i18n():
       LOG.error('Failed to cleanup test directory: %s' % (ex,))
 
 
-@attr('requires_hadoop')
+@attr('requires_hadoop', 'cluster_runnable')
 def test_view_access():
   cluster = pseudo_hdfs4.shared_cluster()
   NO_PERM_DIR = u'/test-no-perm'
@@ -896,7 +896,7 @@ def test_view_access():
       pass      # Don't let cleanup errors mask earlier failures
 
 
-@attr('requires_hadoop')
+@attr('requires_hadoop', 'cluster_runnable')
 def test_index():
   HOME_DIR = u'/user/test'
   NO_HOME_DIR = u'/user/no_home'
@@ -945,7 +945,7 @@ def view_helper(cluster, encoding, content):
       LOG.error('Failed to cleanup %s: %s' % (filename, ex))
 
 
-@attr('requires_hadoop')
+@attr('requires_hadoop', 'cluster_runnable')
 def test_edit_i18n():
   cluster = pseudo_hdfs4.shared_cluster()
   try:
@@ -1035,7 +1035,7 @@ def edit_helper(cluster, encoding, contents_pass_1, contents_pass_2):
       LOG.error('Failed to remove %s: %s' % (smart_str(filename), ex))
 
 
-@attr('requires_hadoop')
+@attr('requires_hadoop', 'cluster_runnable')
 def test_upload_file():
   """Test file upload"""
   cluster = pseudo_hdfs4.shared_cluster()
@@ -1101,7 +1101,8 @@ def test_upload_file():
     except Exception, ex:
       pass
 
-@attr('requires_hadoop')
+
+@attr('requires_hadoop', 'cluster_runnable')
 def test_upload_zip():
   """Test archive upload"""
   cluster = pseudo_hdfs4.shared_cluster()
@@ -1141,7 +1142,8 @@ def test_upload_zip():
     except:
       pass
 
-@attr('requires_hadoop')
+
+@attr('requires_hadoop', 'cluster_runnable')
 def test_upload_tgz():
   """Test archive upload"""
   cluster = pseudo_hdfs4.shared_cluster()
@@ -1188,7 +1190,8 @@ def test_location_to_url():
   assert_equal('/filebrowser/view/', location_to_url('hdfs://localhost:8020'))
   assert_equal(None, location_to_url('thrift://10.0.0.1:9083'))
 
-@attr('requires_hadoop')
+
+@attr('requires_hadoop', 'cluster_runnable')
 def test_trash():
   cluster = pseudo_hdfs4.shared_cluster()
 
