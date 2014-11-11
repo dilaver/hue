@@ -739,6 +739,7 @@ def test_view_avro():
     response = c.get('/filebrowser/view/test-avro-filebrowser/test-view.avro?offset=1')
     assert_equal('avro', response.context['view']['compression'])
 
+    cluster.fs.setuser(cluster.superuser)
     f = cluster.fs.open('/test-avro-filebrowser/test-view2.avro', "w")
     f.write("hello")
     f.close()
@@ -753,7 +754,7 @@ def test_view_avro():
 
   finally:
     try:
-      cluster.fs.rmtree('/test-avro-filebrowser/')
+      cluster.fs.do_as_superuser(cluster.fs.rmtree, '/test-avro-filebrowser/')
     except:
       pass      # Don't let cleanup errors mask earlier failures
 
@@ -818,6 +819,7 @@ def test_view_gz():
     response = c.get('/filebrowser/view/test-gz-filebrowser/test-view.gz?compression=gzip&offset=1')
     assert_true("Offsets are not supported" in response.context['message'], response.context['message'])
 
+    cluster.fs.setuser(cluster.superuser)
     f = cluster.fs.open('/test-gz-filebrowser/test-view2.gz', "w")
     f.write("hello")
     f.close()
@@ -1046,6 +1048,9 @@ def test_upload_file():
     cluster.fs.setuser(USER_NAME)
     client = make_logged_in_client(USER_NAME)
 
+    if cluster.fs.isdir(HDFS_DEST_DIR):
+      cluster.fs.do_as_superuser(cluster.fs.rmtree, HDFS_DEST_DIR)
+
     cluster.fs.do_as_superuser(cluster.fs.mkdir, HDFS_DEST_DIR)
     cluster.fs.do_as_superuser(cluster.fs.chown, HDFS_DEST_DIR, USER_NAME, USER_NAME)
     cluster.fs.do_as_superuser(cluster.fs.chmod, HDFS_DEST_DIR, 0700)
@@ -1091,7 +1096,7 @@ def test_upload_file():
       pass
   finally:
     try:
-      cluster.fs.remove(HDFS_DEST_DIR)
+      cluster.fs.do_as_superuser(cluster.fs.rmtree, HDFS_DEST_DIR)
     except Exception, ex:
       pass
 
@@ -1109,6 +1114,9 @@ def test_upload_zip():
 
     cluster.fs.setuser(USER_NAME)
     client = make_logged_in_client(USER_NAME)
+
+    if cluster.fs.isdir(HDFS_DEST_DIR):
+      cluster.fs.do_as_superuser(cluster.fs.rmtree, HDFS_DEST_DIR)
 
     cluster.fs.mkdir(HDFS_DEST_DIR)
     cluster.fs.chown(HDFS_DEST_DIR, USER_NAME)
@@ -1131,7 +1139,7 @@ def test_upload_zip():
     assert_true(cluster.fs.exists(HDFS_ZIP_FILE))
   finally:
     try:
-      cluster.fs.remove(HDFS_DEST_DIR)
+      cluster.fs.do_as_superuser(cluster.fs.rmtree, HDFS_DEST_DIR)
     except:
       pass
 
@@ -1149,6 +1157,9 @@ def test_upload_tgz():
 
     cluster.fs.setuser(USER_NAME)
     client = make_logged_in_client(USER_NAME)
+
+    if cluster.fs.isdir(HDFS_DEST_DIR):
+      cluster.fs.do_as_superuser(cluster.fs.rmtree, HDFS_DEST_DIR)
 
     cluster.fs.mkdir(HDFS_DEST_DIR)
     cluster.fs.chown(HDFS_DEST_DIR, USER_NAME)
@@ -1172,7 +1183,7 @@ def test_upload_tgz():
     assert_true(cluster.fs.exists(HDFS_TGZ_FILE))
   finally:
     try:
-      cluster.fs.remove(HDFS_DEST_DIR)
+      cluster.fs.do_as_superuser(cluster.fs.rmtree, HDFS_DEST_DIR)
     except:
       pass
 
@@ -1203,7 +1214,11 @@ def test_trash():
 
     # No trash folder
     response = c.get('/filebrowser/view/user/test?default_to_trash', follow=True)
-    assert_equal([], response.redirect_chain)
+    if cluster.fs.isdir('/user/%s/.Trash' % USERNAME):
+      assert_equal([('http://testserver/filebrowser/view/user/test/.Trash', 302)],
+                   response.redirect_chain)
+    else:
+      assert_equal([], response.redirect_chain)
 
     c.post('/filebrowser/rmtree', dict(path=[PATH_1]))
 

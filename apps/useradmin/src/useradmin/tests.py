@@ -657,6 +657,12 @@ def test_ensure_home_directory():
   c = make_logged_in_client(cluster.superuser, is_superuser=True, groupname='test1')
   cluster.fs.setuser(cluster.superuser)
 
+  # cleanup conflicting dirs if any
+  if cluster.fs.isdir('/user/test1'):
+    cluster.fs.rmtree('/user/test1')
+  if cluster.fs.isdir('/user/test2'):
+    cluster.fs.rmtree('/user/test2')
+
   # Create a user with a home directory
   assert_false(cluster.fs.exists('/user/test1'))
   response = c.post('/useradmin/users/new', dict(username="test1", password1='test', password2='test', ensure_home_directory=True))
