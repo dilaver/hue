@@ -302,8 +302,8 @@ class PseudoHdfs4(ClusterBase):
   def _logpath(self, filename):
     return os.path.join(self._log_dir, filename)
 
-    def _start_mr2(self, env):
-      LOG.info("Starting MR2")
+  def _start_mr2(self, env):
+    LOG.info("Starting MR2")
 
     self._mr2_env = env.copy()
 
