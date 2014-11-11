@@ -45,13 +45,56 @@ STARTUP_DEADLINE = 60.0
 CLEANUP_TMP_DIR = os.environ.get('MINI_CLUSTER_CLEANUP', 'true')
 
 
-class PseudoHdfs4(object):
+class ClusterBase(object):
   """Run HDFS and MR2 locally, in pseudo-distributed mode"""
 
   def __init__(self):
+    self._superuser = None
+    self._fs = None
+    self._jt = None
+
+  def __str__(self):
+    return "PseudoHdfs5 (%(name)s) at %(dir)s --- MR2 (%(mapreduce)s) at http://%(fqdn)s:%(port)s" % {
+      'name': self._fs_default_name,
+      'dir': self._tmpdir,
+      'mapreduce': self.mapred_job_tracker,
+      'fqdn': self._fqdn,
+      'port': self._rm_port
+    }
+
+  @property
+  def superuser(self):
+    return self._superuser
+
+  @property
+  def log_dir(self):
+    return self._log_dir
+
+  @property
+  def fs(self):
+    return self._fs
+
+  @property
+  def jt(self):
+    return self._jt
+
+  def start(self):
+    pass
+
+  def stop(self):
+    pass
+
+  def _tmppath(self, filename):
+    return os.path.join(self._tmpdir, filename)
+
+
+class PseudoHdfs4(ClusterBase):
+  """Run HDFS and MR2 locally, in pseudo-distributed mode"""
+
+  def __init__(self):
+    super(PseudoHdfs4, self).__init__()
     self._tmpdir = tempfile.mkdtemp(prefix='tmp_hue_')
     os.chmod(self._tmpdir, 0755)
-    self._superuser = getpass.getuser()
 
     self._fs = None
     self._jt = None
@@ -90,15 +133,30 @@ class PseudoHdfs4(object):
 
   @property
   def superuser(self):
-    return self._superuser
+    super(PseudoHdfs4, self).superuser
+    if self._superuser is None:
+      self._superuser = getpass.getuser()
+    return super(PseudoHdfs4, self).superuser
+
+  @property
+  def fs(self):
+    if self._fs is None:
+      if self._dfs_http_address is None:
+        LOG.warn("Attempt to access uninitialized filesystem")
+        return None
+      self._fs = hadoop.fs.webhdfs.WebHdfs("http://%s/webhdfs/v1" % (self._dfs_http_address,),
+                                           self.fs_default_name)
+    return super(PseudoHdfs4, self).fs
+
+  @property
+  def jt(self):
+    if self._jt is None:
+      self._jt = LiveJobTracker(self._fqdn, 0)
+    return super(PseudoHdfs4, self).jt
 
   @property
   def mr2_env(self):
     return self._mr2_env
-
-  @property
-  def log_dir(self):
-    return self._log_dir
 
   @property
   def fs_default_name(self):
@@ -124,60 +182,9 @@ class PseudoHdfs4(object):
   def hadoop_conf_dir(self):
     return self._tmppath('conf')
 
-  @property
-  def fs(self):
-    if self._fs is None:
-      if self._dfs_http_address is None:
-        LOG.warn("Attempt to access uninitialized filesystem")
-        return None
-      self._fs = hadoop.fs.webhdfs.WebHdfs("http://%s/webhdfs/v1" % (self._dfs_http_address,), self.fs_default_name)
-    return self._fs
-
-  @property
-  def jt(self):
-    if self._jt is None:
-      self._jt = LiveJobTracker(self._fqdn, 0)
-    return self._jt
-
-  def stop(self):
-    def _kill_proc(name, proc):
-      try:
-        while proc is not None and proc.poll() is None:
-          os.kill(proc.pid, signal.SIGKILL)
-          LOG.info('Stopping %s pid %s' % (name, proc.pid,))
-          time.sleep(0.5)
-      except Exception, ex:
-        LOG.exception('Failed to stop pid %s. You may want to do it manually: %s' % (proc.pid, ex))
-
-    _kill_proc('NameNode', self._nn_proc)
-    _kill_proc('DataNode', self._dn_proc)
-    _kill_proc('ResourceManager', self._rm_proc)
-    _kill_proc('Nodemanager', self._nm_proc)
-    _kill_proc('HistoryServer', self._hs_proc)
-
-    self._nn_proc = None
-    self._dn_proc = None
-    self._rm_proc = None
-    self._nm_proc = None
-    self._hs_proc = None
-
-    if CLEANUP_TMP_DIR == 'false':
-      LOG.info('Skipping cleanup of temp directory "%s"' % (self._tmpdir,))
-    else:
-      LOG.info('Cleaning up temp directory "%s". Use "export MINI_CLUSTER_CLEANUP=false" to avoid.' % (self._tmpdir,))
-      shutil.rmtree(self._tmpdir, ignore_errors=True)
-
-    if self.shutdown_hook is not None:
-      self.shutdown_hook()
-
-
-  def _tmppath(self, filename):
-    return os.path.join(self._tmpdir, filename)
-
-  def _logpath(self, filename):
-    return os.path.join(self._log_dir, filename)
-
   def start(self):
+    super(PseudoHdfs4, self).start()
+
     LOG.info("Using temporary directory: %s" % (self._tmpdir,))
 
     if not os.path.exists(self.hadoop_conf_dir):
@@ -217,7 +224,7 @@ class PseudoHdfs4(object):
     if "JAVA_HOME" in os.environ:
       env['JAVA_HOME'] = os.environ['JAVA_HOME']
 
-    LOG.debug("Hadoop Environment:\n" + "\n".join([ str(x) for x in sorted(env.items()) ]))
+    LOG.debug("Hadoop Environment:\n" + "\n".join([str(x) for x in sorted(env.items())]))
 
     # Format HDFS
     self._format(self.hadoop_conf_dir, env)
@@ -257,18 +264,58 @@ class PseudoHdfs4(object):
     self.fs.do_as_user('test', self.fs.create_home_dir, '/user/test')
     self.fs.do_as_user('hue', self.fs.create_home_dir, '/user/hue')
 
+  def stop(self):
+    super(PseudoHdfs4, self).stop()
 
-  def _start_mr2(self, env):
-    LOG.info("Starting MR2")
+    def _kill_proc(name, proc):
+      try:
+        while proc is not None and proc.poll() is None:
+          os.kill(proc.pid, signal.SIGKILL)
+          LOG.info('Stopping %s pid %s' % (name, proc.pid,))
+          time.sleep(0.5)
+      except Exception, ex:
+        LOG.exception('Failed to stop pid %s. You may want to do it manually: %s' % (proc.pid, ex))
+
+    _kill_proc('NameNode', self._nn_proc)
+    _kill_proc('DataNode', self._dn_proc)
+    _kill_proc('ResourceManager', self._rm_proc)
+    _kill_proc('Nodemanager', self._nm_proc)
+    _kill_proc('HistoryServer', self._hs_proc)
+
+    self._nn_proc = None
+    self._dn_proc = None
+    self._rm_proc = None
+    self._nm_proc = None
+    self._hs_proc = None
+
+    if CLEANUP_TMP_DIR == 'false':
+      LOG.info('Skipping cleanup of temp directory "%s"' % (self._tmpdir,))
+    else:
+      LOG.info(
+        'Cleaning up temp directory "%s". Use "export MINI_CLUSTER_CLEANUP=false" to avoid.' % (
+          self._tmpdir,))
+      shutil.rmtree(self._tmpdir, ignore_errors=True)
+
+    if self.shutdown_hook is not None:
+      self.shutdown_hook()
+
+  def _logpath(self, filename):
+    return os.path.join(self._log_dir, filename)
+
+    def _start_mr2(self, env):
+      LOG.info("Starting MR2")
 
     self._mr2_env = env.copy()
 
-    LOG.debug("MR2 Environment:\n" + "\n".join([ str(x) for x in sorted(self.mr2_env.items()) ]))
+    LOG.debug("MR2 Environment:\n" + "\n".join([str(x) for x in sorted(self.mr2_env.items())]))
 
     # Run YARN
-    self._rm_proc = self._start_daemon('resourcemanager', self.hadoop_conf_dir, self.mr2_env, self._get_yarn_bin(self.mr2_env))
-    self._nm_proc = self._start_daemon('nodemanager', self.hadoop_conf_dir, self.mr2_env, self._get_yarn_bin(self.mr2_env))
-    self._hs_proc = self._start_daemon('historyserver', self.hadoop_conf_dir, self.mr2_env, self._get_mapred_bin(self.mr2_env))
+    self._rm_proc = self._start_daemon('resourcemanager', self.hadoop_conf_dir, self.mr2_env,
+                                       self._get_yarn_bin(self.mr2_env))
+    self._nm_proc = self._start_daemon('nodemanager', self.hadoop_conf_dir, self.mr2_env,
+                                       self._get_yarn_bin(self.mr2_env))
+    self._hs_proc = self._start_daemon('historyserver', self.hadoop_conf_dir, self.mr2_env,
+                                       self._get_mapred_bin(self.mr2_env))
 
     # Give them a moment to actually start
     time.sleep(1)
@@ -292,7 +339,9 @@ class PseudoHdfs4(object):
       if ret != 0:
         stdout.seek(0)
         stderr.seek(0)
-        raise RuntimeError('Failed to format namenode\n''=== Stdout ===:\n%s\n''=== Stderr ===:\n%s' % (stdout.read(), stderr.read()))
+        raise RuntimeError(
+          'Failed to format namenode\n''=== Stdout ===:\n%s\n''=== Stderr ===:\n%s' % (
+            stdout.read(), stderr.read()))
     finally:
       stdout.close()
       stderr.close()
@@ -312,9 +361,9 @@ class PseudoHdfs4(object):
 
     # Run a `dfsadmin -report' against it
     dfsreport = subprocess.Popen((self._get_hdfs_bin(env), 'dfsadmin', '-report'),
-      stdout=subprocess.PIPE,
-      stderr=subprocess.PIPE,
-      env=env)
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE,
+                                 env=env)
 
     ret = dfsreport.wait()
     if ret != 0:
@@ -327,7 +376,6 @@ class PseudoHdfs4(object):
       return True
     LOG.debug('Waiting for DN to come up .................\n%s' % (report_out,))
     return False
-
 
   def _is_mr2_ready(self, env):
     if self._rm_proc.poll() is not None:
@@ -354,7 +402,6 @@ class PseudoHdfs4(object):
 
     LOG.debug('MR2 not ready yet.\n%s\n%s' % (list_all.stderr.read(), list_all.stderr.read()))
     return False
-
 
   def _start_daemon(self, proc_name, conf_dir, env, hadoop_bin=None):
     if hadoop_bin is None:
@@ -402,7 +449,8 @@ class PseudoHdfs4(object):
       'dfs.namenode.safemode.extension': 1,
       'dfs.namenode.safemode.threshold-pct': 0,
       'dfs.datanode.address': '%s:0' % self._fqdn,
-      'dfs.datanode.http.address': '0.0.0.0:0', # Work around webhdfs redirect bug -- bind to all interfaces
+      'dfs.datanode.http.address': '0.0.0.0:0',
+      # Work around webhdfs redirect bug -- bind to all interfaces
       'dfs.datanode.ipc.address': '%s:0' % self._fqdn,
       'dfs.replication': 1,
       'dfs.safemode.min.datanodes': 1,
@@ -442,7 +490,8 @@ class PseudoHdfs4(object):
     self._nm_webapp_port = find_unused_port()
 
     yarn_configs = {
-      'yarn.resourcemanager.resource-tracker.address': '%s:%s' % (self._fqdn, self._rm_resource_port,),
+      'yarn.resourcemanager.resource-tracker.address': '%s:%s' % (
+        self._fqdn, self._rm_resource_port,),
       'yarn.resourcemanager.address': '%s:%s' % (self._fqdn, self._rm_port,),
       'yarn.resourcemanager.scheduler.address': '%s:%s' % (self._fqdn, self._rm_scheduler_port,),
       'yarn.resourcemanager.scheduler.class': 'org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FairScheduler',
@@ -455,7 +504,7 @@ class PseudoHdfs4(object):
       'yarn.nodemanager.local-dirs': self._local_dir,
       'yarn.nodemanager.log-dirs': self._logpath('yarn-logs'),
       'yarn.nodemanager.remote-app-log-dir': '/var/log/hadoop-yarn/apps',
-      'yarn.nodemanager.localizer.address' : '%s:%s' % (self._fqdn, self._nm_port,),
+      'yarn.nodemanager.localizer.address': '%s:%s' % (self._fqdn, self._nm_port,),
       'yarn.nodemanager.aux-services': 'mapreduce_shuffle',
       'yarn.nodemanager.aux-services.mapreduce.shuffle.class': 'org.apache.hadoop.mapred.ShuffleHandler',
       'yarn.nodemanager.webapp.address': '%s:%s' % (self._fqdn, self._nm_webapp_port,),
@@ -463,15 +512,14 @@ class PseudoHdfs4(object):
       'yarn.app.mapreduce.am.staging-dir': '/tmp/hadoop-yarn/staging',
 
       'yarn.application.classpath':
-      '''$HADOOP_CONF_DIR,
-        $HADOOP_COMMON_HOME/share/hadoop/common/*,$HADOOP_COMMON_HOME/share/hadoop/common/lib/*,
-        $HADOOP_HDFS_HOME/share/hadoop/hdfs/*,$HADOOP_HDFS_HOME/share/hadoop/hdfs/lib/*,
-        $HADOOP_MAPRED_HOME/share/hadoop/mapreduce/*,$HADOOP_MAPRED_HOME/share/hadoop/mapreduce/lib/*,
-        $HADOOP_YARN_HOME/share/hadoop/yarn/*,$HADOOP_YARN_HOME/share/hadoop/yarn/lib/*''',
+        '''$HADOOP_CONF_DIR,
+          $HADOOP_COMMON_HOME/share/hadoop/common/*,$HADOOP_COMMON_HOME/share/hadoop/common/lib/*,
+          $HADOOP_HDFS_HOME/share/hadoop/hdfs/*,$HADOOP_HDFS_HOME/share/hadoop/hdfs/lib/*,
+          $HADOOP_MAPRED_HOME/share/hadoop/mapreduce/*,$HADOOP_MAPRED_HOME/share/hadoop/mapreduce/lib/*,
+          $HADOOP_YARN_HOME/share/hadoop/yarn/*,$HADOOP_YARN_HOME/share/hadoop/yarn/lib/*''',
     }
     self._yarn_site = self._tmppath('conf/yarn-site.xml')
     write_config(yarn_configs, self._tmppath('conf/yarn-site.xml'))
-
 
   def _write_mapred_site(self):
     self._jh_port = find_unused_port()
@@ -502,10 +550,49 @@ class PseudoHdfs4(object):
       f.close()
 
 
+class RealCluster(ClusterBase):
+  def __init__(self):
+    super(RealCluster, self).__init__()
+    self._fs = None
+    self._jt = None
+
+  @property
+  def superuser(self):
+    if self._superuser is None:
+      self._superuser = self.fs.superuser
+    return super(RealCluster, self).superuser
+
+  @property
+  def fs(self):
+    if self._fs is None:
+      self._fs = hadoop.cluster.get_hdfs()
+    return super(RealCluster, self).fs
+
+  @property
+  def jt(self):
+    if self._jt is None:
+      self._jt = hadoop.cluster.get_mrcluster()
+    return super(RealCluster, self).jt
+
+  def start(self):
+    super(RealCluster, self).start()
+
+  def stop(self):
+    super(RealCluster, self).stop()
+
+
 def shared_cluster():
+
   global _shared_cluster
 
   if _shared_cluster is None:
+
+    TEST_ON_REAL_CLUSTER = os.getenv('HUE_TEST_ON_REAL_CLUSTER', False) in ['True', 'true', 'y', 'Y']
+
+    if TEST_ON_REAL_CLUSTER:
+      _shared_cluster = RealCluster()
+      return _shared_cluster
+
     cluster = PseudoHdfs4()
     atexit.register(cluster.stop)
 
