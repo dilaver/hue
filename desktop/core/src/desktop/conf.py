@@ -141,6 +141,14 @@ MIDDLEWARE = Config(
   type=coerce_csv,
   default=[])
 
+MIDDLEWARE_EXCLUSIONS = Config(
+  key="middleware_exclusions",
+  help=_("Comma-separated list of Django middleware classes to exclude. " +
+         "The list provided in \"middleware\" takes precedence. " +
+         "If a middleware is listed in both, it will not be excluded."),
+  type=coerce_csv,
+  default=[])
+
 REDIRECT_WHITELIST = Config(
   key="redirect_whitelist",
   help=_("Comma-separated list of regular expressions, which match the redirect URL."

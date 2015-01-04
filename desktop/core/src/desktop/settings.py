@@ -331,6 +331,15 @@ if SAML_AUTHENTICATION:
   LOGIN_URL = '/saml2/login/'
   SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 
+# Middleware exclusions.
+# This has been added to facilitate testing and other automation that use entities
+#   other than Django test client. This way csrf middleware can be disabled.
+# Currently "middleware" config takes precedence; it's handled after this (see below)
+# If this changes, please also update the help message for "middleware_exclusions".
+for middleware in desktop.conf.MIDDLEWARE_EXCLUSIONS.get():
+  if middleware in MIDDLEWARE_CLASSES:
+    MIDDLEWARE_CLASSES.remove(middleware)
+
 # Middleware classes.
 for middleware in desktop.conf.MIDDLEWARE.get():
   MIDDLEWARE_CLASSES.append(middleware)

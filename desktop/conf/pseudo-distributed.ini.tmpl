@@ -93,6 +93,10 @@
   # Support for HTTPS termination at the load-balancer level with SECURE_PROXY_SSL_HEADER.
   ## secure_proxy_ssl_header=false
 
+  # Comma-separated list of Django middleware classes to exclude.
+  # See https://docs.djangoproject.com/en/1.4/ref/middleware/ for more details on middlewares in Django.
+  ## middleware_exclusions=django.middleware.csrf.CsrfViewMiddleware
+
   # Comma-separated list of Django middleware classes to use.
   # See https://docs.djangoproject.com/en/1.4/ref/middleware/ for more details on middlewares in Django.
   ## middleware=desktop.auth.backend.LdapSynchronizationBackend
